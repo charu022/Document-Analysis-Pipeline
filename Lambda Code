@@ -1,0 +1,37 @@
+import boto3
+import json
+
+def lambda_handler(event, context):
+	s3 = boto3.client("s3")               
+	textract = boto3.client('textract')
+	comprehend = boto3.client('comprehend')
+	
+	bucket = event['Records'][0]['s3']['bucket']['name']     #name of the bucket
+	key = event['Records'][0]['s3']['object']['key']         #name of the document
+	
+	response = textract.detect_document_text(Document = {'S3Object': {'Bucket' : bucket, 'Name' : key}})  #use textract
+	
+	print ("\nText\n====")
+	text = ""
+	for item in response["Blocks"]:
+		if item["BlockType"] == "LINE":
+			print (item["Text"])
+			text = text + " " +item["Text"]
+	
+	sentiment = comprehend.detect_sentiment(LanguageCode = "en", Text = text)               #comprehend sentiments
+	print ("\nSentiment\n======\n{}".format(sentiment.get('Sentiment')))
+	
+	entities = comprehend.detect_entities(LanguageCode = "en" , Text = text)                #comprehend detect entities
+	print("\nEntities\n=======")
+	for entity in entities["Entities"]:
+		comprehendentity = "{}\t=>\t{}".format(entity["Type"], entity["Text"])
+		print(comprehendentity)
+		
+	keyphrases = comprehend.detect_key_phrases(LanguageCode = "en" , Text = text)           #comprehend key phrases
+	print ("\nKey Phrases\n====")
+	for Keyphrase in keyphrases["KeyPhrases"]:
+		print("{}\t=>\t{}".format(Keyphrase["Score"], Keyphrase["Text"]))
+	
+	with open("/tmp/log.txt", "w") as f:
+		json.dump(comprehendentity, f)
+	s3.upload_file("/tmp/log.txt" , "extracteddata-s3" , "extracteddata.json")
